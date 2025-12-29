@@ -2,8 +2,8 @@
 import React, { useState } from 'react';
 import { SurgicalRecord } from '../types';
 import AutocompleteInput from './AutocompleteInput';
-import { DEPARTMENTS, WARDS } from '../constants';
-import { Save, Image as ImageIcon, Printer, Trash2 } from 'lucide-react';
+import { DEPARTMENTS } from '../constants';
+import { Save, Image as ImageIcon, Printer } from 'lucide-react';
 
 interface SurgicalFormProps {
   onSubmit: (record: SurgicalRecord) => void;
@@ -135,14 +135,13 @@ const SurgicalForm: React.FC<SurgicalFormProps> = ({ onSubmit, onPrintPreview })
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">Ward</label>
-                <select 
+                <input
+                  type="text"
                   className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm"
                   value={formData.ward}
                   onChange={(e) => handleChange('ward', e.target.value)}
-                >
-                  <option value="">Select Ward</option>
-                  {WARDS.map(w => <option key={w} value={w}>{w}</option>)}
-                </select>
+                  placeholder="กรอกชื่อตึก/หอผู้ป่วย"
+                />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1">Department</label>
