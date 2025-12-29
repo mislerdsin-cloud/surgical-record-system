@@ -7,7 +7,7 @@ import Dashboard from './components/Dashboard';
 import SurgicalForm from './components/SurgicalForm';
 import RecordSearch from './components/RecordSearch';
 import PrintPreview from './components/PrintPreview';
-import { LayoutDashboard, FileText, Search, LogOut, Loader2, RefreshCw, AlertCircle } from 'lucide-react';
+import { LayoutDashboard, FileText, Search, LogOut, Loader2, RefreshCw, AlertCircle, ExternalLink, ShieldAlert } from 'lucide-react';
 
 // หลังจากการ Deploy Apps Script แล้ว ให้นำ Web App URL มาใส่ที่นี่
 const API_URL = 'https://script.google.com/macros/s/AKfycbw4UDoa2Xcm6-C257hOAYa27t7LcalU4YJLld7HS81Ll-3yN2UGojQWWILfHsvrcJSUkg/exec';
@@ -18,41 +18,74 @@ const App: React.FC = () => {
   const [selectedRecord, setSelectedRecord] = useState<SurgicalRecord | null>(null);
   const [records, setRecords] = useState<SurgicalRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [apiError, setApiError] = useState<string | null>(null);
+  const [apiError, setApiError] = useState<{ message: string; type: 'cors' | 'network' | 'format' | null }>({ message: '', type: null });
 
   // ฟังก์ชันดึงข้อมูล (GET) จาก Google Sheets ผ่าน API
   const fetchRecords = async () => {
+    if (!API_URL || API_URL.includes('YOUR_DEPLOYED')) return;
+    
     setIsLoading(true);
-    setApiError(null);
+    setApiError({ message: '', type: null });
+    
     try {
-      const response = await fetch(API_URL, {
+      // เพิ่ม timestamp เพื่อป้องกัน cache และปัญหาบางอย่างของ proxy
+      const fetchUrl = `${API_URL}${API_URL.includes('?') ? '&' : '?'}nocache=${Date.now()}`;
+      
+      const response = await fetch(fetchUrl, {
         method: 'GET',
-        cache: 'no-store',
+        redirect: 'follow', // จำเป็นสำหรับ Google Apps Script เพราะมีการ Redirect ไปยัง Google Drive
       });
-      if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP Error! status: ${response.status}`);
+      }
+      
       const data = await response.json();
-      setRecords(data);
-    } catch (error) {
-      console.error("Failed to fetch records:", error);
-      setApiError("ไม่สามารถดึงข้อมูลจากระบบ Cloud ได้ กรุณาตรวจสอบการตั้งค่า Apps Script");
+      if (Array.isArray(data)) {
+        setRecords(data);
+      } else {
+        setApiError({ 
+          message: "รูปแบบข้อมูลจาก Server ไม่ถูกต้อง (Data is not an array)", 
+          type: 'format' 
+        });
+      }
+    } catch (error: any) {
+      console.error("Detailed Fetch error:", error);
+      
+      if (error.message === 'Failed to fetch') {
+        setApiError({ 
+          message: "ไม่สามารถเชื่อมต่อ Cloud ได้ (CORS Error): กรุณาตรวจสอบว่าตอน Deploy ใน Apps Script ได้เลือก 'Who has access: Anyone' และ 'Execute as: Me' หรือยัง?", 
+          type: 'cors' 
+        });
+      } else {
+        setApiError({ 
+          message: `Network Error: ${error.message}`, 
+          type: 'network' 
+        });
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    if (currentUser) {
-      fetchRecords();
-    }
     const session = localStorage.getItem('user_session');
     if (session) {
-      setCurrentUser(JSON.parse(session));
+      const user = JSON.parse(session);
+      setCurrentUser(user);
     }
   }, []);
 
+  useEffect(() => {
+    if (currentUser) {
+      fetchRecords();
+    }
+  }, [currentUser]);
+
   const handleLogin = (email: string) => {
     let role: UserRole = 'VIEWER';
-    if (DEFAULT_ADMINS.includes(email.toLowerCase())) {
+    const lowerEmail = email.toLowerCase();
+    if (DEFAULT_ADMINS.some(admin => admin.toLowerCase() === lowerEmail)) {
       role = 'ADMIN';
     } else if (email.includes('@hospital.com') || email.includes('@gmail.com')) {
       role = 'USER';
@@ -61,21 +94,20 @@ const App: React.FC = () => {
     const user: User = { email, role, name: email.split('@')[0] };
     setCurrentUser(user);
     localStorage.setItem('user_session', JSON.stringify(user));
-    fetchRecords();
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
     localStorage.removeItem('user_session');
+    setRecords([]);
   };
 
-  // ฟังก์ชันส่งข้อมูล (POST) ไปยัง Google Sheets ผ่าน API
   const addRecord = async (record: SurgicalRecord) => {
     setIsLoading(true);
-    setApiError(null);
+    setApiError({ message: '', type: null });
     try {
-      // หมายเหตุ: การใช้ fetch กับ GAS มักติดปัญหา CORS 
-      // การใช้ mode: 'no-cors' จะส่งข้อมูลได้สำเร็จ แต่ฝั่ง Client จะไม่สามารถอ่าน Response ได้
+      // สำหรับ POST ไปยัง GAS เราต้องใช้ mode: 'no-cors' เพื่อข้ามปัญหา CORS Redirect
+      // แม้เบราว์เซอร์จะขึ้นว่า Error (เพราะอ่าน response ไม่ได้) แต่ข้อมูลมักจะเข้า Sheets สำเร็จ
       await fetch(API_URL, {
         method: 'POST',
         mode: 'no-cors', 
@@ -85,19 +117,17 @@ const App: React.FC = () => {
         body: JSON.stringify(record),
       });
 
-      // แจ้งผู้ใช้ว่าส่งข้อมูลแล้ว
-      alert("กำลังส่งข้อมูลไปยัง Google Sheets... กรุณารอซิงค์ข้อมูลสักครู่");
+      alert("ระบบได้รับคำสั่งบันทึกแล้ว... กำลังรอ Cloud อัปเดตข้อมูล (ประมาณ 3-5 วินาที)");
       
-      // รอเวลาให้ Google Script ทำงานเสร็จก่อนดึงข้อมูลใหม่
+      // หน่วงเวลาเพื่อให้ Script ฝั่ง Google ทำงานเสร็จสมบูรณ์
       setTimeout(() => {
         fetchRecords();
         setActiveTab('search');
-      }, 2500);
+      }, 4000);
       
-    } catch (error) {
-      console.error("Failed to save record:", error);
-      setApiError("เกิดข้อผิดพลาดในการส่งข้อมูลไปยังระบบ Cloud");
-      alert("บันทึกล้มเหลว กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต");
+    } catch (error: any) {
+      console.error("Post error:", error);
+      alert("เกิดข้อผิดพลาดทางเทคนิคในการส่งข้อมูล");
     } finally {
       setIsLoading(false);
     }
@@ -113,9 +143,9 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
-      {/* Sidebar - ซ่อนอัตโนมัติเมื่อพิมพ์ */}
-      <div className="w-72 bg-white border-r border-slate-200 flex-shrink-0 flex flex-col no-print shadow-xl shadow-slate-200/50 relative z-20">
+    <div className="flex min-h-screen bg-slate-50 font-['Sarabun']">
+      {/* Sidebar */}
+      <div className="w-72 bg-white border-r border-slate-200 flex-shrink-0 flex flex-col no-print shadow-xl relative z-20">
         <div className="p-8 border-b border-slate-100">
           <div className="flex items-center gap-3 mb-2">
             <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-200">
@@ -129,7 +159,7 @@ const App: React.FC = () => {
         <nav className="flex-1 p-6 space-y-3">
           <button
             onClick={() => setActiveTab('dashboard')}
-            className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-300 ${activeTab === 'dashboard' ? 'bg-slate-900 text-white shadow-2xl shadow-slate-400 translate-x-1' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}
+            className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-300 ${activeTab === 'dashboard' ? 'bg-slate-900 text-white shadow-2xl translate-x-1' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}
           >
             <LayoutDashboard size={20} />
             <span className="font-bold text-sm">Dashboard</span>
@@ -138,7 +168,7 @@ const App: React.FC = () => {
           {(currentUser.role === 'ADMIN' || currentUser.role === 'USER') && (
             <button
               onClick={() => setActiveTab('form')}
-              className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-300 ${activeTab === 'form' ? 'bg-slate-900 text-white shadow-2xl shadow-slate-400 translate-x-1' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}
+              className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-300 ${activeTab === 'form' ? 'bg-slate-900 text-white shadow-2xl translate-x-1' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}
             >
               <FileText size={20} />
               <span className="font-bold text-sm">New Operative Record</span>
@@ -147,7 +177,7 @@ const App: React.FC = () => {
 
           <button
             onClick={() => setActiveTab('search')}
-            className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-300 ${activeTab === 'search' ? 'bg-slate-900 text-white shadow-2xl shadow-slate-400 translate-x-1' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}
+            className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all duration-300 ${activeTab === 'search' ? 'bg-slate-900 text-white shadow-2xl translate-x-1' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}
           >
             <Search size={20} />
             <span className="font-bold text-sm">Record Database</span>
@@ -155,14 +185,27 @@ const App: React.FC = () => {
         </nav>
 
         <div className="p-6 space-y-4">
-          {apiError && (
-             <div className="bg-red-50 text-red-600 p-4 rounded-2xl border border-red-100 flex items-start gap-3">
-                <AlertCircle size={18} className="flex-shrink-0 mt-0.5" />
-                <div className="space-y-2">
-                   <p className="text-[11px] font-bold leading-tight">{apiError}</p>
-                   <button onClick={fetchRecords} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider bg-red-600 text-white px-3 py-1.5 rounded-lg">
-                      <RefreshCw size={10} /> Retry
+          {apiError.message && (
+             <div className={`p-4 rounded-2xl border flex flex-col gap-3 ${apiError.type === 'cors' ? 'bg-red-50 border-red-100 text-red-800' : 'bg-amber-50 border-amber-100 text-amber-800'}`}>
+                <div className="flex items-start gap-3">
+                  {apiError.type === 'cors' ? <ShieldAlert size={18} className="mt-0.5" /> : <AlertCircle size={18} className="mt-0.5" />}
+                  <div className="space-y-1">
+                    <p className="text-[11px] font-bold leading-tight uppercase">API Connectivity Issue</p>
+                    <p className="text-[10px] leading-relaxed opacity-80">{apiError.message}</p>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2">
+                   <button onClick={fetchRecords} className="flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-wider bg-slate-800 text-white px-3 py-2 rounded-xl hover:bg-black transition-all">
+                      <RefreshCw size={10} className={isLoading ? 'animate-spin' : ''} /> Retry Sync
                    </button>
+                   <a 
+                    href={API_URL} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-wider border border-slate-300 px-3 py-2 rounded-xl hover:bg-white/50 transition-all"
+                   >
+                      <ExternalLink size={10} /> Test Web App URL
+                   </a>
                 </div>
              </div>
           )}
@@ -191,13 +234,13 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      {/* พื้นที่แสดงผลหลัก */}
+      {/* Main Content */}
       <main className="flex-1 p-10 overflow-y-auto print:p-0 print:m-0 print:bg-white relative">
         {isLoading && activeTab !== 'preview' && (
-          <div className="fixed top-8 right-8 z-50 no-print">
-             <div className="flex items-center gap-3 text-blue-600 bg-white/80 backdrop-blur-md px-6 py-3 rounded-2xl shadow-2xl border border-blue-50">
-                <Loader2 className="animate-spin" size={18} />
-                <span className="text-sm font-black uppercase tracking-widest">Cloud Syncing...</span>
+          <div className="fixed top-8 right-8 z-50 no-print animate-slideInRight">
+             <div className="flex items-center gap-3 text-blue-600 bg-white/95 backdrop-blur-sm px-6 py-4 rounded-2xl shadow-2xl border border-blue-50">
+                <Loader2 className="animate-spin" size={20} />
+                <span className="text-sm font-black uppercase tracking-[0.1em]">Syncing with Cloud...</span>
              </div>
           </div>
         )}
