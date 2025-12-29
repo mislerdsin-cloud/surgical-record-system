@@ -1,0 +1,7 @@
+{
+  "name": "Surgical Record System",
+  "description": "A comprehensive React-based surgical record management system with specialized printing layouts, role-based access, and smart autocomplete for medical professionals.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
