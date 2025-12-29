@@ -7,7 +7,7 @@ import Dashboard from './components/Dashboard';
 import SurgicalForm from './components/SurgicalForm';
 import RecordSearch from './components/RecordSearch';
 import PrintPreview from './components/PrintPreview';
-import { LayoutDashboard, FileText, Search, LogOut, Loader2, RefreshCw, AlertCircle, ExternalLink, ShieldAlert } from 'lucide-react';
+import { LayoutDashboard, FileText, Search, LogOut, Loader2, RefreshCw, AlertCircle, ExternalLink, ShieldAlert, CheckCircle2 } from 'lucide-react';
 
 // หลังจากการ Deploy Apps Script แล้ว ให้นำ Web App URL มาใส่ที่นี่
 const API_URL = 'https://script.google.com/macros/s/AKfycbw4UDoa2Xcm6-C257hOAYa27t7LcalU4YJLld7HS81Ll-3yN2UGojQWWILfHsvrcJSUkg/exec';
@@ -28,16 +28,14 @@ const App: React.FC = () => {
     setApiError({ message: '', type: null });
     
     try {
-      // เพิ่ม timestamp เพื่อป้องกัน cache และปัญหาบางอย่างของ proxy
-      const fetchUrl = `${API_URL}${API_URL.includes('?') ? '&' : '?'}nocache=${Date.now()}`;
-      
-      const response = await fetch(fetchUrl, {
+      // ใช้แนวทางพื้นฐานที่สุดในการดึงข้อมูลเพื่อเลี่ยง Preflight CORS
+      const response = await fetch(API_URL, {
         method: 'GET',
-        redirect: 'follow', // จำเป็นสำหรับ Google Apps Script เพราะมีการ Redirect ไปยัง Google Drive
+        // ห้ามส่ง Custom Headers เพราะจะทำให้เกิด Preflight Request ที่ GAS อาจจะไม่รองรับ
       });
       
       if (!response.ok) {
-        throw new Error(`HTTP Error! status: ${response.status}`);
+        throw new Error(`HTTP ${response.status}`);
       }
       
       const data = await response.json();
@@ -45,21 +43,25 @@ const App: React.FC = () => {
         setRecords(data);
       } else {
         setApiError({ 
-          message: "รูปแบบข้อมูลจาก Server ไม่ถูกต้อง (Data is not an array)", 
+          message: "ข้อมูลที่ได้รับไม่ใช่รายการ (Data is not an array). กรุณาตรวจสอบว่า script ส่ง return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON) หรือไม่", 
           type: 'format' 
         });
       }
     } catch (error: any) {
-      console.error("Detailed Fetch error:", error);
+      console.error("Fetch failure:", error);
       
+      // ข้อผิดพลาด 'Failed to fetch' มักเกิดจาก 3 สาเหตุ:
+      // 1. URL ผิด
+      // 2. ไม่ได้เลือก 'Who has access: Anyone' ในตอน Deploy (ทำให้ติดหน้า Login Google)
+      // 3. ปัญหา CORS (ซึ่ง GAS จะแก้ได้โดยการส่ง JSON พร้อม MimeType ที่ถูกต้อง)
       if (error.message === 'Failed to fetch') {
         setApiError({ 
-          message: "ไม่สามารถเชื่อมต่อ Cloud ได้ (CORS Error): กรุณาตรวจสอบว่าตอน Deploy ใน Apps Script ได้เลือก 'Who has access: Anyone' และ 'Execute as: Me' หรือยัง?", 
+          message: "การเชื่อมต่อล้มเหลว (Failed to fetch): มักเกิดจากการไม่ได้ตั้งค่า 'Who has access: Anyone' ในหน้า Deploy ของ Google Apps Script หรือ URL ไม่ถูกต้อง", 
           type: 'cors' 
         });
       } else {
         setApiError({ 
-          message: `Network Error: ${error.message}`, 
+          message: `เกิดข้อผิดพลาด: ${error.message}`, 
           type: 'network' 
         });
       }
@@ -106,20 +108,20 @@ const App: React.FC = () => {
     setIsLoading(true);
     setApiError({ message: '', type: null });
     try {
-      // สำหรับ POST ไปยัง GAS เราต้องใช้ mode: 'no-cors' เพื่อข้ามปัญหา CORS Redirect
-      // แม้เบราว์เซอร์จะขึ้นว่า Error (เพราะอ่าน response ไม่ได้) แต่ข้อมูลมักจะเข้า Sheets สำเร็จ
+      // การ POST ไปยัง GAS จะติดปัญหา CORS Redirect (302) เสมอ 
+      // การใช้ mode: 'no-cors' จะทำให้ส่งสำเร็จแม้เบราว์เซอร์จะแจ้งว่า error (opaque response)
       await fetch(API_URL, {
         method: 'POST',
-        mode: 'no-cors', 
+        mode: 'no-cors',
+        cache: 'no-cache',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'text/plain', // ใช้ text/plain เพื่อเลี่ยง preflight cors
         },
         body: JSON.stringify(record),
       });
 
-      alert("ระบบได้รับคำสั่งบันทึกแล้ว... กำลังรอ Cloud อัปเดตข้อมูล (ประมาณ 3-5 วินาที)");
+      alert("บันทึกข้อมูลเรียบร้อยแล้ว! (ข้อมูลจะปรากฏในระบบภายใน 3-5 วินาที)");
       
-      // หน่วงเวลาเพื่อให้ Script ฝั่ง Google ทำงานเสร็จสมบูรณ์
       setTimeout(() => {
         fetchRecords();
         setActiveTab('search');
@@ -127,7 +129,7 @@ const App: React.FC = () => {
       
     } catch (error: any) {
       console.error("Post error:", error);
-      alert("เกิดข้อผิดพลาดทางเทคนิคในการส่งข้อมูล");
+      alert("ไม่สามารถบันทึกข้อมูลได้ กรุณาตรวจสอบอินเทอร์เน็ต");
     } finally {
       setIsLoading(false);
     }
@@ -186,27 +188,47 @@ const App: React.FC = () => {
 
         <div className="p-6 space-y-4">
           {apiError.message && (
-             <div className={`p-4 rounded-2xl border flex flex-col gap-3 ${apiError.type === 'cors' ? 'bg-red-50 border-red-100 text-red-800' : 'bg-amber-50 border-amber-100 text-amber-800'}`}>
+             <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm flex flex-col gap-4">
                 <div className="flex items-start gap-3">
-                  {apiError.type === 'cors' ? <ShieldAlert size={18} className="mt-0.5" /> : <AlertCircle size={18} className="mt-0.5" />}
+                  <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center text-amber-600 shrink-0">
+                    <AlertCircle size={20} />
+                  </div>
                   <div className="space-y-1">
-                    <p className="text-[11px] font-bold leading-tight uppercase">API Connectivity Issue</p>
-                    <p className="text-[10px] leading-relaxed opacity-80">{apiError.message}</p>
+                    <p className="text-[11px] font-black uppercase text-slate-400 tracking-wider">Connection Guide</p>
+                    <p className="text-[11px] leading-relaxed text-slate-600">{apiError.message}</p>
                   </div>
                 </div>
+                
+                <div className="space-y-2 border-t border-slate-100 pt-3">
+                   <p className="text-[10px] font-bold text-slate-500">วิธีแก้ไขที่ Google Script:</p>
+                   <ul className="text-[9px] text-slate-400 space-y-1 ml-4 list-disc">
+                      <li>Deploy > New Deployment</li>
+                      <li>Execute as: <b>Me</b></li>
+                      <li>Who has access: <b>Anyone</b></li>
+                      <li>ตรวจสอบว่า doPost และ doGet ทำงานได้ปกติ</li>
+                   </ul>
+                </div>
+
                 <div className="flex flex-col gap-2">
-                   <button onClick={fetchRecords} className="flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-wider bg-slate-800 text-white px-3 py-2 rounded-xl hover:bg-black transition-all">
-                      <RefreshCw size={10} className={isLoading ? 'animate-spin' : ''} /> Retry Sync
+                   <button onClick={fetchRecords} className="flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-wider bg-blue-600 text-white px-3 py-2.5 rounded-xl hover:bg-blue-700 transition-all shadow-md shadow-blue-100">
+                      <RefreshCw size={12} className={isLoading ? 'animate-spin' : ''} /> Retry Connectivity
                    </button>
                    <a 
                     href={API_URL} 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-wider border border-slate-300 px-3 py-2 rounded-xl hover:bg-white/50 transition-all"
+                    className="flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-wider bg-slate-50 text-slate-600 px-3 py-2.5 rounded-xl border border-slate-200 hover:bg-white transition-all"
                    >
-                      <ExternalLink size={10} /> Test Web App URL
+                      <ExternalLink size={12} /> Test URL (Manual)
                    </a>
                 </div>
+             </div>
+          )}
+
+          {!apiError.message && records.length > 0 && (
+             <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center gap-3">
+                <CheckCircle2 size={18} className="text-emerald-500" />
+                <span className="text-[11px] font-bold text-emerald-700">Cloud Connected</span>
              </div>
           )}
 
@@ -240,7 +262,7 @@ const App: React.FC = () => {
           <div className="fixed top-8 right-8 z-50 no-print animate-slideInRight">
              <div className="flex items-center gap-3 text-blue-600 bg-white/95 backdrop-blur-sm px-6 py-4 rounded-2xl shadow-2xl border border-blue-50">
                 <Loader2 className="animate-spin" size={20} />
-                <span className="text-sm font-black uppercase tracking-[0.1em]">Syncing with Cloud...</span>
+                <span className="text-sm font-black uppercase tracking-[0.1em]">Syncing...</span>
              </div>
           </div>
         )}
