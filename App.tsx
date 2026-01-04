@@ -10,7 +10,7 @@ import PrintPreview from './components/PrintPreview';
 import { LayoutDashboard, FileText, Search, LogOut, Loader2, RefreshCw, AlertCircle, ExternalLink, ShieldAlert, CheckCircle2 } from 'lucide-react';
 
 // หลังจากการ Deploy Apps Script แล้ว ให้นำ Web App URL มาใส่ที่นี่
-const API_URL = 'https://script.google.com/macros/s/AKfycbw4UDoa2Xcm6-C257hOAYa27t7LcalU4YJLld7HS81Ll-3yN2UGojQWWILfHsvrcJSUkg/exec';
+const API_URL = 'https://script.googleusercontent.com/macros/echo?user_content_key=AehSKLiPO_0QwpmZvNzpG9oCOP-43Ab0lfk92ETTmOGWFURqLdi5zB45nkVAGQN9uNz2-JxGmFo-WshhAGkSxAy3d03M-qU-JvWfiLN8G3sxBLc_rOwXxX8XSq6Ze4nxOK2kfz3gCssOzCCxyof_Q56W7EeAUO-QvI0Mu4hibfvlKaVWUA1NX9s26tGGR8bGUcZHDUANDnqZgw9QtP8hZSGmvAqpiEM_DjkB3hoQLRiD7EaS65nh7H_Ca-dNPgMeSoZWE7JlAiR8K-argvNp6x8U4xRK0GLEhA&lib=MxdCgj-x75obG7OwBuMCD38YoiXznYos2';
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
