@@ -9,8 +9,10 @@ import RecordSearch from './components/RecordSearch';
 import PrintPreview from './components/PrintPreview';
 import { LayoutDashboard, FileText, Search, LogOut, Loader2, RefreshCw, AlertCircle, ExternalLink, ShieldAlert, CheckCircle2 } from 'lucide-react';
 
-// อ่าน URL จาก Environment Variable ที่จะตั้งค่าใน Vercel
-const API_URL = process.env.REACT_APP_GOOGLE_SCRIPT_URL;
+// ใส่ Web App URL ที่ได้จากการ Deploy Google Apps Script (ตัวที่ redirect แล้ว)
+// นี่คือ URL ที่ถูกต้องสำหรับโปรเจกต์นี้
+const API_URL = 'https://script.googleusercontent.com/macros/echo?user_content_key=AehSKLiPO_0QwpmZvNzpG9oCOP-43Ab0lfk92ETTmOGWFURqLdi5zB45nkVAGQN9uNz2-JxGmFo-WshhAGkSxAy3d03M-qU-JvWfiLN8G3sxBLc_rOwXxX8XSq6Ze4nxOK2kfz3gCssOzCCxyof_Q56W7EeAUO-QvI0Mu4hibfvlKaVWUA1NX9s26tGGR8bGUcZHDUANDnqZgw9QtP8hZSGmvAqpiEM_DjkB3hoQLRiD7EaS65nh7H_Ca-dNPgMeSoZWE7JlAiR8K-argvNp6x8U4xRK0GLEhA&lib=MxdCgj-x75obG7OwBuMCD38YoiXznYos2';
+
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -24,7 +26,7 @@ const App: React.FC = () => {
   const fetchRecords = async () => {
     if (!API_URL) {
         setApiError({ 
-          message: "API URL is not configured. Please set up REACT_APP_GOOGLE_SCRIPT_URL in your environment variables.", 
+          message: "API URL is not configured. Please set the API_URL constant in App.tsx.", 
           type: 'format' 
         });
         return;
