@@ -9,8 +9,8 @@ import RecordSearch from './components/RecordSearch';
 import PrintPreview from './components/PrintPreview';
 import { LayoutDashboard, FileText, Search, LogOut, Loader2, RefreshCw, AlertCircle, ExternalLink, ShieldAlert, CheckCircle2 } from 'lucide-react';
 
-// หลังจากการ Deploy Apps Script แล้ว ให้นำ Web App URL มาใส่ที่นี่
-const API_URL = 'https://script.googleusercontent.com/macros/echo?user_content_key=AehSKLiPO_0QwpmZvNzpG9oCOP-43Ab0lfk92ETTmOGWFURqLdi5zB45nkVAGQN9uNz2-JxGmFo-WshhAGkSxAy3d03M-qU-JvWfiLN8G3sxBLc_rOwXxX8XSq6Ze4nxOK2kfz3gCssOzCCxyof_Q56W7EeAUO-QvI0Mu4hibfvlKaVWUA1NX9s26tGGR8bGUcZHDUANDnqZgw9QtP8hZSGmvAqpiEM_DjkB3hoQLRiD7EaS65nh7H_Ca-dNPgMeSoZWE7JlAiR8K-argvNp6x8U4xRK0GLEhA&lib=MxdCgj-x75obG7OwBuMCD38YoiXznYos2';
+// อ่าน URL จาก Environment Variable ที่จะตั้งค่าใน Vercel
+const API_URL = process.env.REACT_APP_GOOGLE_SCRIPT_URL;
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -22,7 +22,13 @@ const App: React.FC = () => {
 
   // ฟังก์ชันดึงข้อมูล (GET) จาก Google Sheets ผ่าน API
   const fetchRecords = async () => {
-    if (!API_URL || API_URL.includes('YOUR_DEPLOYED')) return;
+    if (!API_URL) {
+        setApiError({ 
+          message: "API URL is not configured. Please set up REACT_APP_GOOGLE_SCRIPT_URL in your environment variables.", 
+          type: 'format' 
+        });
+        return;
+    }
     
     setIsLoading(true);
     setApiError({ message: '', type: null });
@@ -105,6 +111,10 @@ const App: React.FC = () => {
   };
 
   const addRecord = async (record: SurgicalRecord) => {
+    if (!API_URL) {
+      alert("API URL is not configured.");
+      return;
+    }
     setIsLoading(true);
     setApiError({ message: '', type: null });
     try {
@@ -213,14 +223,14 @@ const App: React.FC = () => {
                    <button onClick={fetchRecords} className="flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-wider bg-blue-600 text-white px-3 py-2.5 rounded-xl hover:bg-blue-700 transition-all shadow-md shadow-blue-100">
                       <RefreshCw size={12} className={isLoading ? 'animate-spin' : ''} /> Retry Connectivity
                    </button>
-                   <a 
+                   {API_URL && <a 
                     href={API_URL} 
                     target="_blank" 
                     rel="noopener noreferrer"
                     className="flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-wider bg-slate-50 text-slate-600 px-3 py-2.5 rounded-xl border border-slate-200 hover:bg-white transition-all"
                    >
                       <ExternalLink size={12} /> Test URL (Manual)
-                   </a>
+                   </a>}
                 </div>
              </div>
           )}
